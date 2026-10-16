@@ -142,7 +142,7 @@ body{background:#f8f7fc;color:#231b36}body>header{display:none}#app{max-width:no
 <section class="panel tab hidden management" id="comparison"><div class="panel-heading"><div><h2>Household comparison</h2><p>Compare monthly income, expenses and surplus by household.</p></div></div><div id="comparisonContent"></div></section>
 <section class="panel tab hidden management" id="goals"><div class="panel-heading"><div><h2>Savings goals</h2><p>Set targets, record contributions and track progress.</p></div><button class="primary-btn" onclick="editGoal()">+ New goal</button></div><div id="goalsContent"></div></section>
 <section class="panel tab hidden management" id="affordability"><div class="panel-heading"><div><h2>Can we afford it?</h2><p>Estimate affordability using recorded monthly cash flow.</p></div></div><div class="afford-grid"><label>Household<select id="affHouse" onchange="calculateAffordability()"></select></label><label>Purchase price (R)<input id="affPrice" type="number" min="0" step="0.01" placeholder="e.g. 15000" oninput="calculateAffordability()"></label><label>Existing savings available (R)<input id="affSavings" type="number" min="0" step="0.01" value="0" oninput="calculateAffordability()"></label><label>Months to save<input id="affMonths" type="number" min="1" max="120" value="6" oninput="calculateAffordability()"></label></div><div id="affResult" class="aff-result"></div><p class="small-note">Estimates assume current monthly spending continues. They do not verify bank balances, outstanding debt, emergency reserves or actual cash availability.</p></section>
-<section class="panel tab hidden management" id="leadership"><div class="panel-heading"><div><h2>Family spending leadership</h2><p>Compare expenses across family members and households. Rankings reflect spending allocation, not personal responsibility.</p></div><div class="leader-controls"><label>Month <input type="month" id="leaderMonth" onchange="renderLeadership()"></label><label>Household <select id="leaderHouse" onchange="renderLeadership()"></select></label></div></div><div id="leaderStats" class="leader-stats"></div><div class="visual-grid"><article class="panel"><h3>Family member leaderboard</h3><p class="leader-sub">Highest attributed expenses first</p><div id="leaderMembers"></div></article><article class="panel"><h3>Household spending leaderboard</h3><p class="leader-sub">Total expenses, including shared spending</p><div id="leaderHouseholds"></div></article></div><div class="panel" style="margin-top:16px"><h3>Spending by category</h3><p class="leader-sub">Expense allocation for the selected period</p><div id="leaderCategories"></div></div><p class="leader-note">Only recorded expense transactions are included. Income is excluded. Unassigned expenses are shown as household-wide spending and are not attributed to any individual.</p></section><section class="panel tab hidden management" id="familytree"><div class="panel-heading"><div><h2>Interactive family spending tree</h2><p>Choose a household to view the colour-coded spending risk matrix. Select a family member for details.</p></div><select id="treeHouse" onchange="renderFamilyTree()"></select></div><div class="strategic-plan-action"><button type="button" class="primary" onclick="downloadHouseholdStrategicPlan()">⬇ Download household financial strategic plan (PDF)</button><p>Personalised from recorded household income, expenses and categories. Review recommendations before making financial decisions.</p></div><div id="treeDiagram"></div><div id="treeDetails" class="insight-card">Select a family member to view their spending.</div></section>
+<section class="panel tab hidden management" id="leadership"><div class="panel-heading"><div><h2>Family spending leadership</h2><p>Compare expenses across family members and households. Rankings reflect spending allocation, not personal responsibility.</p></div><div class="leader-controls"><label>Month <input type="month" id="leaderMonth" onchange="renderLeadership()"></label><label>Household <select id="leaderHouse" onchange="renderLeadership()"></select></label></div></div><div id="leaderStats" class="leader-stats"></div><div class="visual-grid"><article class="panel"><h3>Family member leaderboard</h3><p class="leader-sub">Highest attributed expenses first</p><div id="leaderMembers"></div></article><article class="panel"><h3>Household spending leaderboard</h3><p class="leader-sub">Total expenses, including shared spending</p><div id="leaderHouseholds"></div></article></div><div class="panel" style="margin-top:16px"><h3>Spending by category</h3><p class="leader-sub">Expense allocation for the selected period</p><div id="leaderCategories"></div></div><p class="leader-note">Only recorded expense transactions are included. Income is excluded. Unassigned expenses are shown as household-wide spending and are not attributed to any individual.</p></section><section class="panel tab hidden management" id="familytree"><div class="panel-heading"><div><h2>Interactive family spending tree</h2><p>Choose a household to view the colour-coded spending risk matrix. Select a family member for details.</p></div><select id="treeHouse" onchange="renderFamilyTree()"></select></div><div class="strategic-plan-action"><button type="button" class="primary" onclick="downloadFamilyTreePDF()">⬇ Export family tree (PDF)</button> <button type="button" class="primary" onclick="downloadHouseholdStrategicPlan()">⬇ Download household financial strategic plan (PDF)</button><p>Personalised from recorded household income, expenses and categories. Review recommendations before making financial decisions.</p></div><div id="treeDiagram"></div><div id="treeDetails" class="insight-card">Select a family member to view their spending.</div></section>
 <section class="panel tab hidden management" id="audit"><div class="panel-heading"><div><h2>Notifications &amp; audit log</h2><p>Recent changes to transactions, approvals and family members.</p></div><button class="secondary" onclick="loadBudgetAudit()">↻ Refresh</button></div><div id="auditFeed">Loading…</div></section>
 <section class="panel tab hidden management" id="insights"><div class="panel-heading"><div><h2>Insights &amp; projections</h2><p>Understand patterns and plan ahead</p></div><span class="panel-chip">Rule-based analysis</span></div><div id="insightContent"></div><small>Estimates are based on entered records, not generative AI or financial advice.</small></section>
 </div></div></div>
@@ -275,10 +275,56 @@ async function exportTransactions(format){
       if(!window.jspdf?.jsPDF)throw Error('PDF export library did not load. Check your internet connection.');
       const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
       if(typeof doc.autoTable!=='function')throw Error('PDF table library did not load.');
-      doc.setFontSize(17);doc.text('Family Budget Tracker - '+householdName,14,16,{maxWidth:265});
-      doc.setFontSize(9);doc.text('Household: '+householdName+' | Exported '+stamp+' | '+rows.length+' transactions | Amounts in ZAR',14,23,{maxWidth:265});
-      doc.autoTable({startY:28,head:[['Date','Household','Member','Category','Type','Description','Amount (ZAR)','Recurring','Generated']],body:rows.map(r=>[r.Date,r.Household,r.Member,r.Category,r.Type,r.Description,r.Amount.toFixed(2),r['Monthly recurring'],r['Generated recurrence']]),styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},headStyles:{fillColor:[99,49,169]},columnStyles:{5:{cellWidth:52}},margin:{left:9,right:9}});
-      const pageCount=doc.internal.getNumberOfPages();for(let p=1;p<=pageCount;p++){doc.setPage(p);doc.setFontSize(7);doc.setTextColor(75,45,100);doc.text('Created by Ryno and Shene Verster  |  Protected by Ryno and Shene Verster  |  Built with Pure Code',14,202);doc.text('Page '+p+' of '+pageCount,282,202,{align:'right'});}
+      // The executive summary is based on the most recent transaction month;
+      // the appendix remains a complete export of all household transactions.
+      const money=n=>'R '+Number(n||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+      const monthKey=all.map(t=>String(t.occurred_on||'').slice(0,7)).filter(Boolean).sort().pop();
+      const monthly=all.filter(t=>String(t.occurred_on||'').startsWith(monthKey));
+      const income=monthly.filter(t=>t.kind==='income').reduce((n,t)=>n+Number(t.amount||0),0);
+      const expense=monthly.filter(t=>t.kind==='expense').reduce((n,t)=>n+Number(t.amount||0),0);
+      const salary=store.budget_members.filter(m=>m.household_id===householdId).reduce((n,m)=>n+Number(m.salary||0),0);
+      const available=salary+income-expense;
+      const ratio=salary+income>0?expense/(salary+income)*100:null;
+      const monthLabel=new Date(monthKey+'-01T12:00:00').toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+      const purple=[109,57,190],deep=[47,32,75],muted=[108,99,124],pale=[247,244,253],pink=[227,102,151];
+      const categoryTotals=new Map();
+      monthly.filter(t=>t.kind==='expense').forEach(t=>{const k=cats.get(t.category_id)||'Uncategorised';categoryTotals.set(k,(categoryTotals.get(k)||0)+Number(t.amount||0));});
+      const ranked=[...categoryTotals].sort((a,b)=>b[1]-a[1]);
+      const essentialPattern=/rent|housing|grocer|food|electric|water|utilit|health|medical|school|educat|childcare|transport|fuel|insurance|debt/i;
+      const discretionaryPattern=/subscription|entertain|stream|gym|personal care|leisure|gaming|shopping|restaurant|takeaway|vape/i;
+      const discretionary=ranked.filter(([name])=>discretionaryPattern.test(name));
+      const estimatedDiscretionary=discretionary.reduce((n,[,v])=>n+v,0);
+      const savingsScenario=estimatedDiscretionary*.25;
+      const recommendations=[];
+      if(available<0)recommendations.push('Cash-flow alert: recorded spending exceeds salary and other income by '+money(-available)+'. Review the largest categories first.');
+      else recommendations.push('Estimated monthly surplus: '+money(available)+'. Consider reserving part for emergency savings and irregular costs.');
+      if(ranked.length)recommendations.push('Largest spending category: '+ranked[0][0]+' ('+money(ranked[0][1])+'). Review contracts, frequency and necessity.');
+      if(discretionary.length)recommendations.push('Illustrative saving: reducing likely discretionary categories by 25% could free '+money(savingsScenario)+' per month.');
+      else recommendations.push('Review each category manually for optional spending; none were confidently identified by category name.');
+      if(salary===0)recommendations.push('No member salary is recorded for this household. Confirm income before using affordability conclusions.');
+      recommendations.push('Protect essentials such as housing, groceries, utilities, healthcare and schooling before reducing optional costs.');
+      const width=297;
+      doc.setFillColor(...deep);doc.rect(0,0,width,45,'F');
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(21);doc.text('HOUSEHOLD FINANCIAL REPORT',14,17);
+      doc.setFont('helvetica','normal');doc.setFontSize(12);doc.text(householdName,14,26,{maxWidth:255});
+      doc.setFontSize(9);doc.text('Financial snapshot: '+monthLabel+'   |   Generated: '+stamp+'   |   ZAR',14,35);
+      doc.setTextColor(...deep);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text('Monthly financial position',14,56);
+      const cards=[['MONTHLY SALARIES',salary],['ADDITIONAL INCOME',income],['MONTHLY EXPENSES',expense],['ESTIMATED BALANCE',available]];
+      cards.forEach(([label,value],i)=>{const x=14+i*68.1;doc.setFillColor(...pale);doc.roundedRect(x,61,64,25,3,3,'F');doc.setFont('helvetica','normal');doc.setTextColor(...muted);doc.setFontSize(8);doc.text(label,x+4,69);doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(...(i===3&&value<0?[178,43,75]:deep));doc.text(money(value),x+4,79,{maxWidth:57});});
+      doc.setFont('helvetica','bold');doc.setTextColor(...deep);doc.setFontSize(12);doc.text('Spending pressure',14,99);
+      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...muted);doc.text(ratio===null?'Unassessed - no recorded monthly income':ratio.toFixed(1)+'% of recorded monthly income',14,106);
+      doc.setFillColor(234,229,241);doc.roundedRect(14,110,269,7,3,3,'F');doc.setFillColor(...(ratio===null?muted:ratio>=100?[195,50,86]:ratio>=75?[229,148,53]:purple));doc.roundedRect(14,110,269*Math.min(1,Math.max(0,(ratio||0)/100)),7,3,3,'F');
+      doc.setFont('helvetica','bold');doc.setTextColor(...deep);doc.setFontSize(12);doc.text('Where expenses are concentrated',14,129);
+      let cy=137;ranked.slice(0,4).forEach(([name,value])=>{doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...deep);doc.text(name.slice(0,35),14,cy);doc.text(money(value),282,cy,{align:'right'});doc.setFillColor(238,234,245);doc.roundedRect(90,cy-3,150,3,1,1,'F');doc.setFillColor(...purple);doc.roundedRect(90,cy-3,150*(expense?value/expense:0),3,1,1,'F');cy+=9;});
+      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('Recommended next steps',14,181);
+      doc.setFont('helvetica','normal');doc.setFontSize(8.5);let ry=188;
+      recommendations.forEach((item,i)=>{const lines=doc.splitTextToSize((i+1)+'. '+item,267);if(ry+lines.length*4>198)return;doc.setTextColor(...muted);doc.text(lines,14,ry);ry+=lines.length*4+2;});
+      doc.addPage();
+      doc.setFillColor(...deep);doc.rect(0,0,width,27,'F');doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('TRANSACTION REGISTER',14,13);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(householdName+'  |  '+rows.length+' transactions  |  All recorded dates',14,20);
+      doc.autoTable({startY:33,head:[['Date','Member','Category','Type','Description','Amount (ZAR)','Recurring']],body:rows.map(r=>[r.Date,r.Member||'Household',r.Category,r.Type,r.Description,money(r.Amount),r['Monthly recurring']]),theme:'striped',styles:{fontSize:8,cellPadding:2.8,overflow:'linebreak',textColor:deep},headStyles:{fillColor:purple,fontStyle:'bold'},alternateRowStyles:{fillColor:pale},columnStyles:{4:{cellWidth:74},5:{halign:'right',cellWidth:32}},margin:{left:14,right:14,top:17,bottom:19},didDrawPage:(data)=>{if(data.pageNumber>2){doc.setFontSize(8);doc.setTextColor(...muted);doc.text('Transaction register - '+householdName,14,11);}}});
+      const pageCount=doc.internal.getNumberOfPages();for(let p=1;p<=pageCount;p++){doc.setPage(p);doc.setDrawColor(225,217,237);doc.line(14,199,283,199);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...muted);doc.text('Created by Ryno and Shene Verster  |  Protected by Ryno and Shene Verster  |  Built with Pure Code',14,204);doc.text('Page '+p+' of '+pageCount,282,204,{align:'right'});}
+      // The recommendation model is descriptive and relies on category labels,
+      // recorded salaries and transactions; it is not personalised financial advice.
       doc.setProperties({title:'Family Budget Tracker - '+householdName+' - Transactions',author:'Ryno and Shene Verster',subject:PLATFORM_ATTRIBUTION,creator:'Family Budget Tracker - Pure Code'});
       doc.save('family-transactions-'+householdFilename+'-'+stamp+'.pdf');
     }
@@ -471,4 +517,53 @@ return '<tr><td>'+esc(t.occurred_on)+'</td><td>'+esc(label('budget_households',t
 }
 function renderAdditionalIncomeChart(){const root=document.getElementById('additionalIncomeChart');if(!root||typeof store==='undefined')return;const tx=filtered('budget_transactions'),now=new Date(),months=[];for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1),key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');months.push({label:d.toLocaleString('en-ZA',{month:'short'}),value:tx.filter(t=>t.kind==='income'&&String(t.occurred_on).startsWith(key)).reduce((sum,t)=>sum+Number(t.amount||0),0)})}const max=Math.max(1,...months.map(x=>x.value));root.innerHTML=months.map(x=>'<div class="extra-income-col"><strong>'+money(x.value)+'</strong><div class="income-bar-area"><div class="income-bar" style="height:'+Math.max(3,x.value/max*95)+'px"></div></div><small>'+esc(x.label)+'</small></div>').join('');}
 const budgetOriginalRender=render;render=function(){budgetOriginalRender();renderTransactionRiskTable();renderAdditionalIncomeChart();};
-</script></body></html>
+</script><script id="family-tree-pdf-export">
+function downloadFamilyTreePDF(){
+ try{
+  if(!window.jspdf?.jsPDF)throw Error('PDF library has not loaded. Check your connection.');
+  const hid=document.getElementById('treeHouse')?.value;
+  const h=(store.budget_households||[]).find(x=>x.id===hid);
+  if(!h)throw Error('Select a household in Family Tree first.');
+  const month=new Date().toISOString().slice(0,7);
+  const members=(store.budget_members||[]).filter(m=>m.household_id===hid);
+  const tx=(store.budget_transactions||[]).filter(t=>t.household_id===hid&&t.kind==='expense'&&t.occurred_on?.startsWith(month));
+  const total=tx.reduce((n,t)=>n+Number(t.amount||0),0);
+  const shared=tx.filter(t=>!t.member_id).reduce((n,t)=>n+Number(t.amount||0),0);
+  const salary=members.reduce((n,m)=>n+Math.max(0,Number(m.salary||0)),0);
+  const ranked=members.map(m=>({m,r:familyRiskProfile(m,tx,total,salary)})).sort((a,b)=>(b.r.ratio??-1)-(a.r.ratio??-1));
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),W=210;
+  const purple=[111,56,188],dark=[47,30,77];
+  const fmt=n=>'R '+Number(n||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const footer=()=>{let count=pdf.internal.getNumberOfPages();for(let i=1;i<=count;i++){pdf.setPage(i);pdf.setDrawColor(227,217,240);pdf.line(12,281,198,281);pdf.setFontSize(7);pdf.setTextColor(103,83,122);pdf.text('Created by Ryno and Shene Verster | Protected by Ryno and Shene Verster | Built with Pure Code',12,286);pdf.text(i+' / '+count,198,286,{align:'right'});}};
+  pdf.setFillColor(...dark);pdf.rect(0,0,W,41,'F');pdf.setTextColor(255,255,255);pdf.setFont('helvetica','bold');pdf.setFontSize(20);pdf.text('FAMILY SPENDING TREE',13,18);pdf.setFontSize(11);pdf.text(h.name,13,29);pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.text('Monthly financial risk matrix  |  '+month,13,36);
+  const cards=[['Household salaries',salary],['Member + shared expenses',total],['Shared expenses',shared]];
+  cards.forEach((x,i)=>{let left=13+i*62;pdf.setFillColor(247,243,252);pdf.roundedRect(left,48,59,24,3,3,'F');pdf.setFontSize(8);pdf.setTextColor(91,74,113);pdf.text(x[0],left+3,55);pdf.setFont('helvetica','bold');pdf.setFontSize(12);pdf.setTextColor(...dark);pdf.text(fmt(x[1]),left+3,65);pdf.setFont('helvetica','normal');});
+  pdf.setFontSize(11);pdf.setFont('helvetica','bold');pdf.setTextColor(...dark);pdf.text('Household',105,85,{align:'center'});
+  pdf.setFillColor(...purple);pdf.roundedRect(56,90,98,19,4,4,'F');pdf.setTextColor(255,255,255);pdf.setFontSize(10);pdf.text(h.name,105,98,{align:'center'});pdf.setFontSize(8);pdf.text(fmt(total)+' spent this month',105,104,{align:'center'});
+  pdf.setDrawColor(174,145,210);pdf.line(105,109,105,117);pdf.line(25,117,185,117);
+  const cols=3,boxW=57,boxH=29,gap=6,firstX=13;
+  let top=124;
+  const riskColors={low:[31,144,91],medium:[203,143,26],high:[199,57,80],unknown:[125,118,136]};
+  ranked.forEach(({m,r},i)=>{const col=i%cols,row=Math.floor(i/cols),x=firstX+col*(boxW+gap),y=top+row*35;
+   if(y+boxH>266)return;
+   pdf.setFillColor(249,247,253);pdf.setDrawColor(...riskColors[r.level]);pdf.roundedRect(x,y,boxW,boxH,3,3,'FD');
+   pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.setTextColor(...dark);pdf.text(pdf.splitTextToSize(m.name,boxW-6)[0],x+3,y+7);
+   pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(77,65,92);pdf.text(fmt(r.spending)+' expenses',x+3,y+14);
+   pdf.setFont('helvetica','bold');pdf.setTextColor(...riskColors[r.level]);pdf.text((r.ratio===null?'Unassessed':r.ratio.toFixed(1)+'%')+'  |  '+r.level.toUpperCase(),x+3,y+21);
+   pdf.setFont('helvetica','normal');pdf.setFontSize(6.5);pdf.setTextColor(105,94,116);pdf.text(r.dependent?'Compared to household salaries':'Compared to member salary',x+3,y+26);
+  });
+  let bottom=top+Math.ceil(ranked.length/cols)*35+7;
+  if(bottom>257){pdf.addPage();bottom=18;}
+  pdf.setTextColor(...dark);pdf.setFontSize(10);pdf.setFont('helvetica','bold');pdf.text('Risk thresholds',13,bottom);pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.text('Green: under 30%  |  Amber: 30%-59.9%  |  Red: 60%+  |  Grey: no income base',13,bottom+7);
+  pdf.setFontSize(7.5);pdf.setTextColor(91,80,105);const note='Risk compares member-attributed expenses with their own salary, or total household salaries for members without income. Shared expenses are reported separately. This is a spending-pressure indicator, not a personal credit score.';
+  pdf.text(pdf.splitTextToSize(note,182),13,bottom+14);
+  pdf.addPage();pdf.setTextColor(...dark);pdf.setFontSize(16);pdf.setFont('helvetica','bold');pdf.text('Member spending analysis',13,20);
+  const body=ranked.map(({m,r})=>[m.name,m.role||'Family Member',fmt(r.spending),fmt(r.incomeBase),r.ratio===null?'N/A':r.ratio.toFixed(1)+'%',r.level.toUpperCase()]);
+  if(typeof pdf.autoTable==='function')pdf.autoTable({startY:27,head:[['Member','Role','Expenses','Income base','Pressure','Risk']],body,theme:'striped',headStyles:{fillColor:purple},styles:{fontSize:8},margin:{left:12,right:12}});
+  else {let y=30;body.forEach(row=>{if(y>260){pdf.addPage();y=20;}pdf.setFontSize(8);pdf.text(pdf.splitTextToSize(row.join(' | '),180),13,y);y+=11;});}
+  pdf.setProperties({title:h.name+' - Family Spending Tree',author:'Ryno and Shene Verster',subject:'Household family spending risk matrix',creator:'Family Budget Tracker - Built with Pure Code'});
+  footer();const safe=h.name.replace(/[^a-z0-9_-]+/gi,'-').replace(/^-|-$/g,'');pdf.save('family-tree-'+safe+'-'+month+'.pdf');
+ }catch(e){console.error(e);alert('Family tree PDF export failed: '+(e.message||e));}
+}
+</script>
+</body></html>
