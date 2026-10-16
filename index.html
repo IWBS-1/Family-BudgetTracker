@@ -317,15 +317,18 @@ async function reopenBudgetRequest(id){const reason=prompt('Reason for reversing
 let budgetAuditRows=[];let lastAuditSeen=Number(localStorage.getItem('budgetAuditSeen')||0);
 async function loadBudgetAudit(){if(!user)return;const el=document.getElementById('auditFeed');const {data,error}=await db.from('budget_audit_events').select('*').order('created_at',{ascending:false}).limit(300);if(error){if(el)el.textContent=error.message;return;}budgetAuditRows=data||[];if(el){el.innerHTML=budgetAuditRows.length?budgetAuditRows.map(x=>`<div class="audit-entry"><strong>${esc(x.event_type)} · ${esc(x.entity_type.replace(/^budget_/,''))}</strong><small>${new Date(x.created_at).toLocaleString('en-ZA')} · Actor: ${esc(x.actor_id||'Automated process')} · Household: ${esc(label('budget_households',x.household_id))}</small><p>${esc(x.details?.description||x.details?.name||'Record changed')} ${x.details?.amount?money(x.details.amount):''} ${x.details?.status?' · '+esc(x.details.status):''}</p></div>`).join(''):'<p>No recorded events yet. The log begins when database auditing was enabled.</p>';lastAuditSeen=Date.now();localStorage.setItem('budgetAuditSeen',String(lastAuditSeen));}const badge=document.getElementById('budgetBellCount');if(badge)badge.textContent=el?'':String(budgetAuditRows.filter(x=>new Date(x.created_at).getTime()>lastAuditSeen).length||'');}
 async function budgetCheckNotifications(){if(!user)return;const {data}=await db.from('budget_audit_events').select('created_at').order('created_at',{ascending:false}).limit(30);const n=(data||[]).filter(x=>new Date(x.created_at).getTime()>lastAuditSeen).length;const badge=document.getElementById('budgetBellCount');if(badge)badge.textContent=n?String(n):'';}
-function familyRiskProfile(member,expenses,total){
+function familyRiskProfile(member,expenses,total,householdIncome=0){
   const spending=expenses.filter(t=>t.member_id===member.id).reduce((sum,t)=>sum+Number(t.amount||0),0);
   const salary=Number(member.salary||0);
   const share=total>0?100*spending/total:0;
-  // This is a spending pressure indicator, not a credit score or financial diagnosis.
-  const ratio=salary>0?100*spending/salary:null;
+  // Dependants have no salary: assess attributed costs against the household's
+  // available monthly income, not against zero or a fictitious personal salary.
+  const dependent=salary<=0;
+  const incomeBase=dependent?householdIncome:salary;
+  const ratio=incomeBase>0?100*spending/incomeBase:null;
   const level=ratio===null?'unknown':ratio>=60?'high':ratio>=30?'medium':'low';
   const title={high:'High spending pressure',medium:'Moderate spending pressure',low:'Low spending pressure',unknown:'Insufficient income data'}[level];
-  return {spending,salary,share,ratio,level,title};
+  return {spending,salary,share,ratio,level,title,dependent,incomeBase};
 }
 function renderFamilyTree(){
   if(!user)return;
@@ -337,15 +340,28 @@ function renderFamilyTree(){
   const members=store.budget_members.filter(m=>m.household_id===h.id),month=new Date().toISOString().slice(0,7);
   const expenses=store.budget_transactions.filter(t=>t.household_id===h.id&&t.kind==='expense'&&t.occurred_on?.startsWith(month));
   const total=expenses.reduce((a,t)=>a+Number(t.amount||0),0),shared=expenses.filter(t=>!t.member_id).reduce((a,t)=>a+Number(t.amount||0),0);
-  const scored=members.map(m=>({m,r:familyRiskProfile(m,expenses,total)}));
+  const householdIncome=members.reduce((a,m)=>a+Math.max(0,Number(m.salary||0)),0);
+  const scored=members.map(m=>({m,r:familyRiskProfile(m,expenses,total,householdIncome)}));
   const order={high:0,medium:1,low:2,unknown:3};scored.sort((a,b)=>order[a.r.level]-order[b.r.level]||b.r.spending-a.r.spending);
-  tree.innerHTML=`<div class="tree-root"><strong>⌂ ${esc(h.name)}</strong><p>Monthly household spending: ${money(total)}</p><small>Shared household expenses: ${money(shared)}</small></div>
-    <div class="risk-legend"><span class="risk-low">● Low · under 30%</span><span class="risk-medium">● Moderate · 30–59%</span><span class="risk-high">● High · 60% or more</span><span class="risk-unknown">● Unassessed · no salary</span></div>
-    <p class="risk-matrix-note">Colour indicates member-attributed monthly expenses as a percentage of that member's recorded monthly salary. This is an indicative spending-pressure measure, not a definitive financial risk assessment. Household-wide expenses are excluded from individual scores.</p>
-    <div class="tree-branches">${scored.map(({m,r})=>`<button class="tree-person risk-${r.level}" onclick="showFamilySpending('${m.id}')"><strong>${esc(m.name)}</strong><small>${esc(m.role||'Family Member')}</small><span class="risk-badge risk-${r.level}">${esc(r.title)}</span><p>${money(r.spending)} this month</p><div class="tree-bar"><i style="width:${Math.min(100,r.ratio===null?0:r.ratio)}%"></i></div><small>${r.ratio===null?'Salary not recorded':r.ratio.toFixed(1)+'% of monthly salary'} · ${r.share.toFixed(1)}% of household expenses</small></button>`).join('')}</div>`;
-  document.getElementById('treeDetails').textContent='Select a family member to view spending by category and their spending-pressure score.';
+  tree.innerHTML=`<div class="tree-root"><strong>⌂ ${esc(h.name)}</strong><p>Monthly household spending: ${money(total)}</p><small>Shared household expenses: ${money(shared)} · Recorded household salaries: ${money(householdIncome)}</small></div>
+    <div class="risk-legend"><span class="risk-low">● Low · under 30%</span><span class="risk-medium">● Moderate · 30–59%</span><span class="risk-high">● High · 60% or more</span><span class="risk-unknown">● Unassessed · no income base</span></div>
+    <p class="risk-matrix-note">Earning members: their attributed expenses ÷ their salary. Dependants without salary: their attributed expenses ÷ combined recorded household salaries. Shared expenses are not assigned to a dependant unless explicitly linked to them. The colours indicate spending pressure, not personal fault or a credit-risk assessment.</p>
+    <div class="tree-branches">${scored.map(({m,r})=>`<button class="tree-person risk-${r.level}" onclick="showFamilySpending('${m.id}')"><strong>${esc(m.name)}</strong><small>${esc(m.role||'Family Member')}</small><span class="risk-badge risk-${r.level}">${esc(r.title)}</span><p>${money(r.spending)} this month</p><div class="tree-bar"><i style="width:${Math.min(100,r.ratio===null?0:r.ratio)}%"></i></div><small>${r.ratio===null?'No recorded household income':r.ratio.toFixed(1)+'% of '+(r.dependent?'household income':'monthly salary')} · ${r.share.toFixed(1)}% of household expenses</small></button>`).join('')}</div>`;
+  document.getElementById('treeDetails').textContent='Select a family member to view their attributed spending and the income base used for their score.';
 }
-function showFamilySpending(id){const m=store.budget_members.find(x=>x.id===id);if(!m)return;const month=new Date().toISOString().slice(0,7);const tx=store.budget_transactions.filter(t=>t.member_id===id&&t.kind==='expense'&&t.occurred_on?.startsWith(month));const groups={};tx.forEach(t=>{const key=label('budget_categories',t.category_id);groups[key]=(groups[key]||0)+Number(t.amount)});const total=tx.reduce((a,t)=>a+Number(t.amount),0);document.getElementById('treeDetails').innerHTML=`<h3>${esc(m.name)} · ${esc(m.role||'Family Member')}</h3><p>Expenses this month: <strong>${money(total)}</strong></p><div class="risk-metrics"><div><strong>Monthly salary</strong><p>${money(Number(m.salary||0))}</p></div><div><strong>Spending pressure</strong><p><span class="risk-badge risk-${familyRiskProfile(m,tx,total).level}">${familyRiskProfile(m,tx,total).ratio===null?'Not assessed':familyRiskProfile(m,tx,total).ratio.toFixed(1)+'% of salary'}</span></p></div></div>${Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([name,amount])=>`<div class="tree-detail-row">${esc(name)} — ${money(amount)}<div class="tree-bar"><i style="width:${total?amount/total*100:0}%"></i></div></div>`).join('')||'<p>No member-specific expenses recorded this month.</p>'}`;}
+function showFamilySpending(id){
+  const m=store.budget_members.find(x=>x.id===id);if(!m)return;
+  const month=new Date().toISOString().slice(0,7);
+  const houseMembers=store.budget_members.filter(x=>x.household_id===m.household_id);
+  const householdIncome=houseMembers.reduce((a,x)=>a+Math.max(0,Number(x.salary||0)),0);
+  const all=store.budget_transactions.filter(t=>t.household_id===m.household_id&&t.kind==='expense'&&t.occurred_on?.startsWith(month));
+  const tx=all.filter(t=>t.member_id===id),groups={};
+  tx.forEach(t=>{const key=label('budget_categories',t.category_id);groups[key]=(groups[key]||0)+Number(t.amount||0)});
+  const total=tx.reduce((a,t)=>a+Number(t.amount||0),0);
+  const householdTotal=all.reduce((a,t)=>a+Number(t.amount||0),0);
+  const r=familyRiskProfile(m,all,householdTotal,householdIncome);
+  document.getElementById('treeDetails').innerHTML=`<h3>${esc(m.name)} · ${esc(m.role||'Family Member')}</h3><p>Attributed expenses this month: <strong>${money(total)}</strong></p><div class="risk-metrics"><div><strong>${r.dependent?'Household salary base':'Monthly salary'}</strong><p>${money(r.incomeBase)}</p></div><div><strong>Spending pressure</strong><p><span class="risk-badge risk-${r.level}">${r.ratio===null?'Not assessed':r.ratio.toFixed(1)+'% of '+(r.dependent?'household income':'salary')}</span></p></div><div><strong>Share of household expenses</strong><p>${r.share.toFixed(1)}%</p></div></div>${r.dependent?'<p>This member has no recorded salary. Expenses assigned to them are assumed to be household-funded and measured against recorded household salaries. Unassigned shared expenses are not included.</p>':''}${Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([name,amount])=>`<div class="tree-detail-row">${esc(name)} — ${money(amount)}<div class="tree-bar"><i style="width:${total?amount/total*100:0}%"></i></div></div>`).join('')||'<p>No member-specific expenses recorded this month.</p>'}`;
+}
 const _budgetAuditStart=start;start=async function(){await _budgetAuditStart();if(user)await budgetCheckNotifications();};
 </script>
 <script>function renderLeadership(){
